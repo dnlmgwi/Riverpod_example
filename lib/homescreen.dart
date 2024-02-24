@@ -1,9 +1,8 @@
-import 'dart:math';
-import 'package:flutter/cupertino.dart';
+import 'package:ble_peripheral/ble_peripheral.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:riverpod_example/model/meal.dart';
-import 'package:riverpod_example/model/todo.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:riverpod_example/provider/permission_provider.dart';
 import 'provider/providers.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -11,119 +10,84 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // simple provider
-    final providerValue = ref.watch(helloProvider);
+    final blePeripheral = ref.read(blePeripheralProvider);
 
-    // state provider
-    final stateProviderValue = ref.watch(stateProvider);
+    void startAdvertising() async {
+      const serviceBattery = "12345678-1234-1234-1234-123456789abc";
 
-    // future provider
-    AsyncValue<MealModel> futureProviderValue = ref.watch(futureProvider);
+      // Set callback for advertising state
+      BlePeripheral.setAdvertingStartedCallback((String? error) {
+        var advertisingState = ref.read(advertisingStateProvider.notifier);
+        var advertisingError = ref.read(advertisingErrorProvider);
 
-    // stream provider
-    // bitcoin,ethereum,monero,litecoin
-    final streamProviderValue = ref.watch(bitCoinProvider('bitcoin'));
+        if (error != null) {
+          // print("AdvertisingFailed: $error");
+          advertisingError = error;
+          advertisingState.state = false;
+        } else {
+          // print("AdvertisingStarted");
+          advertisingError = null;
+          advertisingState.state = true;
+        }
+      });
 
-    // notifier provider
-    List<TodoModel> notifierProviderValue = ref.watch(todoNotifierProvider);
+      // Start advertising
+      await BlePeripheral.startAdvertising(
+        services: [serviceBattery],
+        localName: "NX10",
+      );
+    }
 
-    return  Scaffold(
-      appBar: AppBar(title: const Text('Riverpod'),),
-      body: Column(
-        children: [
-          Text('Basic Provider : $providerValue'),
-          const Divider(
-            thickness: 2,
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              ElevatedButton(onPressed: (){
-                ref.read(stateProvider.notifier).state++;
-              }, child: const Icon(Icons.add)),
-              Text('State Provider Value : $stateProviderValue'),
-              ElevatedButton(onPressed: (){
-                ref.read(stateProvider.notifier).state--;
-              }, child: const Icon(Icons.remove)),
-            ],
-          ),
-          ElevatedButton(onPressed: (){
-            ref.read(stateProvider.notifier).state = 0;
-          }, child: const Icon(Icons.refresh)),
-          const Divider(
-            thickness: 2,
-          ),
-         const Text('Future Provider with pull to refresh'),
-          SizedBox(
-            height: 100,
-            child: RefreshIndicator(
-              onRefresh: () => ref.refresh(futureProvider.future),
-              child: futureProviderValue.when(data: (meal){
-                return ListView(
-                  children: [
-                    Text(meal.idMeal),
-                    Text(meal.strArea),
-                    Text(meal.strCategory),
-                    Text(meal.strMeal),
-                  ],
-                );
-              }, error: (error, stackTrace){
-                return Center(
-                  child: Text(error.toString()),
-                );
-              }, loading: () => const CircularProgressIndicator()),
-            ),
-          ),
-          const Divider(
-            thickness: 2,
-          ),
-          streamProviderValue.when(data: (data){
-            final currency = data.keys.first;
-            final price = data[currency];
-            return Column(
-              children: [
-               const Text('Stream Provider'),
-                Text(currency),
-                Text('USD ${price.toString()}' ),
-              ],
-            );
-          }, error: (error, stackTrace) {
-            return Center(
-              child: Text(error.toString()),
-            );
-          }, loading: () => const CircularProgressIndicator(),),
-          const Divider(
-            thickness: 2,
-          ),
-          const Text('Notify Provider'),
-          ElevatedButton(onPressed: (){
-            final todoModel =  TodoModel(title: getRandomString(3), isCompleted: false);
-            ref.read(todoNotifierProvider.notifier).addTodo(todoModel);
-          }, child: const Icon(Icons.add)),
-          SizedBox(
-            height: 150,
-            child: ListView.builder(
-                itemCount: notifierProviderValue.length,
-                itemBuilder: (context, index) {
-                  return ListTile(
-                    title: Text(notifierProviderValue[index].title),
-                    leading: Checkbox(value: notifierProviderValue[index].isCompleted, onChanged: (value){
-                      ref.read(todoNotifierProvider.notifier).toggleTodo(index);
-                    }),
-                    trailing: Visibility(
-                        visible: notifierProviderValue[index].isCompleted,
-                        child: IconButton(onPressed: (){
-                          ref.read(todoNotifierProvider.notifier).removeTodo(index);
-                        }, icon: const Icon(Icons.delete))),
-                  );
-                }
-            ),
-          )
-        ],
+    void stopAdvertising() async {
+      // Stop advertising
+      await BlePeripheral.stopAdvertising();
+
+      // Update advertising state
+      var advertisingState = ref.read(advertisingStateProvider.notifier);
+      advertisingState.state = false;
+    }
+
+    final permissionStatus = ref.watch(permissionStatusProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('NACIT BLE'),
       ),
-
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            ElevatedButton(
+              onPressed: () {
+               startAdvertising();
+              },
+              child: const Text('Start BLE'),
+            ),
+            if (permissionStatus.isDenied)
+              ElevatedButton(
+                onPressed: () {
+                  final permissionStatusNotifier =
+                      ref.read(permissionStatusProvider.notifier);
+                  permissionStatusNotifier.requestPermission();
+                },
+                child: const Text('Request Bluetooth Permission'),
+              ),
+            if (permissionStatus.isRestricted)
+              const Text(
+                'Bluetooth access is restricted by the OS.',
+                style: TextStyle(color: Colors.red),
+              ),
+            if (permissionStatus.isRestricted || !permissionStatus.isGranted)
+              ElevatedButton(
+                onPressed: () {
+                  openAppSettings();
+                },
+                child: const Text('Open Settings Permission'),
+              ),
+          ],
+        ),
+      ),
     );
   }
-
-
 }

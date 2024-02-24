@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:ble_peripheral/ble_peripheral.dart';
 import 'package:dio/dio.dart';
 import 'package:riverpod/riverpod.dart';
 import 'package:riverpod_example/model/meal.dart';
@@ -10,7 +11,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 // simple provider
 final helloProvider = Provider((ref) => 'Hello World Provider');
 
-
+final blePeripheralProvider = Provider((ref) => BlePeripheral());
 
 // state provider
 final stateProvider = StateProvider<int>((ref) {
@@ -86,3 +87,6 @@ class TodoNotifier extends Notifier<List<TodoModel>>{
 
 // create notifier provider
 final todoNotifierProvider = NotifierProvider<TodoNotifier, List<TodoModel>>(() =>TodoNotifier());
+
+final advertisingStateProvider = StateProvider<bool>((ref) => false);
+final advertisingErrorProvider = StateProvider<String?>((ref) => null);
